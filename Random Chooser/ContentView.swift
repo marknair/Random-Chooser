@@ -8,31 +8,34 @@
 import SwiftUI
 import AVFoundation
 
+// MARK: - Person Model
+
 struct Person: Identifiable {
     let id = UUID()
     let name: String
     let imageName: String
 }
 
+// MARK: - SoundManager
+
 class SoundManager {
     static let shared = SoundManager()
     
-    var spinningSound: AVAudioPlayer?
-    var winSound: AVAudioPlayer?
+    private var spinningSound: AVAudioPlayer?
+    private var winSound: AVAudioPlayer?
     
-    init() {
-        // Initialize sound players
-        if let spinningPath = Bundle.main.path(forResource: "spinning", ofType: "mp3") {
-            spinningSound = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: spinningPath))
-            spinningSound?.numberOfLoops = -1  // Loop indefinitely
+    private func loadSound(named name: String, type: String) -> AVAudioPlayer? {
+        if let path = Bundle.main.path(forResource: name, ofType: type) {
+            return try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: path))
         }
-        
-        if let winPath = Bundle.main.path(forResource: "win", ofType: "mp3") {
-            winSound = try? AVAudioPlayer(contentsOf: URL(fileURLWithPath: winPath))
-        }
+        return nil
     }
     
     func playSpinningSound() {
+        if spinningSound == nil {
+            spinningSound = loadSound(named: "spinning", type: "mp3")
+            spinningSound?.numberOfLoops = -1
+        }
         spinningSound?.play()
     }
     
@@ -42,17 +45,22 @@ class SoundManager {
     }
     
     func playWinSound() {
+        if winSound == nil {
+            winSound = loadSound(named: "win", type: "mp3")
+        }
         winSound?.play()
     }
 }
+
+// MARK: - ContentView
 
 struct ContentView: View {
     // Sample data
     let people = [
         Person(name: "Max", imageName: "Max"),
-               Person(name: "Jameson", imageName: "Jameson"),
-               Person(name: "Gabe", imageName: "Gabe"),
-               Person(name: "Chaden", imageName: "Chaden"),
+        Person(name: "Jameson", imageName: "Jameson"),
+        Person(name: "Gabe", imageName: "Gabe"),
+        Person(name: "Chaden", imageName: "Chaden"),
     ]
     
     @State private var selectedPerson: Person?
@@ -60,8 +68,6 @@ struct ContentView: View {
     @State private var currentIndex = 0
     @State private var spinTimer: Timer?
     @State private var spinCount = 0
-    
-    // Animation properties
     @State private var scale: CGFloat = 1.0
     
     var body: some View {
@@ -93,7 +99,7 @@ struct ContentView: View {
             Button(action: {
                 startSpinning()
             }) {
-                Text(isSpinning ? "Spinning..." : "Spin!")
+                Text(isSpinning ? "Thinking..." : "Choose")
                     .font(.title2)
                     .bold()
                     .foregroundColor(.white)
@@ -106,37 +112,33 @@ struct ContentView: View {
         .padding()
     }
     
+    // MARK: - Start Spinning
+    
     private func startSpinning() {
         isSpinning = true
         spinCount = 0
-        
-        // Start spinning sound
         SoundManager.shared.playSpinningSound()
         
-        // Initialize timer to update display
+        // Start spinning with a scale animation and timer
+        withAnimation(.easeInOut(duration: 0.1).repeatForever(autoreverses: true)) {
+            scale = 0.95
+        }
+        
+        // Initialize timer for updating display
         spinTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
-            // Update current display
             currentIndex = (currentIndex + 1) % people.count
             selectedPerson = people[currentIndex]
             
-            // Add subtle scale animation during spinning
-            withAnimation(.easeInOut(duration: 0.1)) {
-                scale = 0.95
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    scale = 1.0
-                }
-            }
-            
-            // Count frames and slow down/stop after 3 complete cycles
             if currentIndex == people.count - 1 {
                 spinCount += 1
-                
                 if spinCount >= 3 {
                     stopSpinning()
                 }
             }
         }
     }
+    
+    // MARK: - Stop Spinning
     
     private func stopSpinning() {
         spinTimer?.invalidate()
@@ -146,13 +148,17 @@ struct ContentView: View {
         // Stop spinning sound
         SoundManager.shared.stopSpinningSound()
         
-        // Select final random person
-        selectedPerson = people.randomElement()
+        // Choose a random final person who is different from the current `selectedPerson`
+        var newPerson: Person
+        repeat {
+            newPerson = people.randomElement()!
+        } while newPerson.id == selectedPerson?.id
         
-        // Play win sound and animate final selection
+        selectedPerson = newPerson
+        
+        // Play win sound and victory animation
         SoundManager.shared.playWinSound()
         
-        // Victory animation
         withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
             scale = 1.2
         }
@@ -164,11 +170,6 @@ struct ContentView: View {
         }
     }
 }
-
-
-
-
-
 
 #Preview {
     ContentView()
